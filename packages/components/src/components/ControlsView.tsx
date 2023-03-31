@@ -6,7 +6,6 @@ import { AudioSelectButton } from './AudioSelectButton';
 import { ControlButton } from './ControlButton';
 import styles from './styles.module.css';
 import { VideoSelectButton } from './VideoSelectButton';
-
 export interface ControlsProps {
   room: Room;
   enableScreenShare?: boolean;
@@ -106,6 +105,38 @@ export const ControlsView = ({
 
   return (
     <div className={styles.controlsWrapper}>
+      <button
+        onClick={() => {
+          room.participants.forEach(async (participant) => {
+            const participantInfo = fetch(
+              'http://localhost:7880/twirp/livekit.RoomService/UpdateParticipant',
+              {
+                headers: {
+                  accept: 'application/json, text/plain, */*',
+                  authorization:
+                    'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ2aWRlbyI6eyJyb29tQWRtaW4iOnRydWUsInJvb20iOiJTdHVkZW50cyJ9LCJpYXQiOjE2ODAxMjEyMDQsIm5iZiI6MTY4MDEyMTIwNCwiZXhwIjoxNjgwMTIxODA0LCJpc3MiOiJkZXZrZXkifQ.HZMiLnIjn3sEdjqGGvzT4dUrwwvk-RaOu6rYngObfOk',
+                  'content-type': 'application/json',
+                },
+                referrerPolicy: 'strict-origin-when-cross-origin',
+                body: JSON.stringify({
+                  room: 'Students',
+                  identity: participant.identity,
+                  metadata: JSON.stringify({
+                    group: { title: 'A', color: 'red' },
+                  }),
+                  name: '',
+                }),
+                method: 'POST',
+                mode: 'cors',
+                credentials: 'include',
+              },
+            );
+            console.log({ participantInfo: participantInfo });
+          });
+        }}
+      >
+        Send Test
+      </button>
       {muteButton}
       {videoButton}
       {screenButton}

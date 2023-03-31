@@ -9,7 +9,7 @@ import {
   RoomConnectOptions,
   ConnectionState,
 } from 'livekit-client';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 export interface RoomState {
   connect: (url: string, token: string, options?: RoomConnectOptions) => Promise<Room | undefined>;
@@ -24,7 +24,7 @@ export interface RoomState {
 }
 
 export function useRoom(roomOptions?: RoomOptions): RoomState {
-  const [room, setRoom] = useState<Room | undefined>();
+  const [room] = useState(new Room(roomOptions));
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<Error>();
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -33,13 +33,10 @@ export function useRoom(roomOptions?: RoomOptions): RoomState {
     ConnectionState.Disconnected,
   );
 
-  useEffect(() => {
-    setRoom(new Room(roomOptions));
-  }, []);
-
   const connectFn = useCallback(
     async (url: string, token: string, options?: RoomConnectOptions) => {
       setIsConnecting(true);
+      console.log({ connectFn: room });
       try {
         const onParticipantsChanged = () => {
           if (!room) return;
@@ -48,6 +45,7 @@ export function useRoom(roomOptions?: RoomOptions): RoomState {
           participants.push(...remotes);
           setParticipants(participants);
         };
+
         const onSubscribedTrackChanged = (track?: RemoteTrack) => {
           // ordering may have changed, re-sort
           onParticipantsChanged();

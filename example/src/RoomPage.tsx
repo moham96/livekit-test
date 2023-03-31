@@ -1,139 +1,86 @@
-import { faSquare, faThLarge, faUserFriends } from '@fortawesome/free-solid-svg-icons';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { Room, RoomEvent, setLogLevel, VideoPresets } from 'livekit-client';
-import { DisplayContext, DisplayOptions, LiveKitRoom } from '@livekit/react-components';
-import { useState } from 'react';
-import 'react-aspect-ratio/aspect-ratio.css';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useCallback, useEffect } from 'react';
+import { useRoom } from '@livekit/react-components';
+import { ConnectionState, setLogLevel, RoomEvent } from 'livekit-client';
+const token =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjEwNjgwMjYyMzQ4LCJpc3MiOiJkZXZrZXkiLCJuYW1lIjoidXNlcjEiLCJuYmYiOjE2ODAyNjIzNDgsInN1YiI6InVzZXIxIiwidmlkZW8iOnsicm9vbSI6IlN0dWRlbnRzIiwicm9vbUFkbWluIjp0cnVlLCJyb29tSm9pbiI6dHJ1ZX19.us1Yn1hFJM9TUfjkfJ4F2ts1g1CZJJWSD7eDsbKYh7o';
+export function RoomPage() {
+  const roomState = useRoom();
 
-export const RoomPage = () => {
-  const [numParticipants, setNumParticipants] = useState(0);
-  const [displayOptions, setDisplayOptions] = useState<DisplayOptions>({
-    stageLayout: 'grid',
-    showStats: false,
-  });
-  const navigate = useNavigate();
-  const query = new URLSearchParams(useLocation().search);
-  const url = query.get('url');
-  const token = query.get('token');
-  const recorder = query.get('recorder');
+  useEffect(() => {
+    console.log({ roomState });
+    setLogLevel('debug');
+    roomState
+      .connect('ws://localhost:7880', token)
+      .then((room) => {
+        console.log('connecting', room);
+        if (!room) {
+          console.log(new Error('RoomPage room is not ready yet'));
+          return;
+        }
+        room.once(RoomEvent.Disconnected, () => {
+          console.log('disconnected');
+        });
 
-  if (!url || !token) {
-    return <div>url and token are required</div>;
-  }
+        if (room.state === ConnectionState.Connected) {
+          console.log('connected successfully');
+        }
+      })
+      .catch((reason) =>
+        console.log('failed', { reason: reason, 'roomState.error': roomState.error }),
+      );
 
-  const onLeave = () => {
-    navigate('/');
-  };
-
-  const updateParticipantSize = (room: Room) => {
-    setNumParticipants(room.participants.size + 1);
-  };
-
-  const onParticipantDisconnected = (room: Room) => {
-    updateParticipantSize(room);
-
-    /* Special rule for recorder */
-    if (recorder && parseInt(recorder, 10) === 1 && room.participants.size === 0) {
-      console.log('END_RECORDING');
-    }
-  };
-
-  const updateOptions = (options: DisplayOptions) => {
-    setDisplayOptions({
-      ...displayOptions,
-      ...options,
+    return () => {
+      if (roomState.room?.state !== ConnectionState.Disconnected) {
+        roomState.room?.disconnect();
+      }
+    };
+  }, []);
+  const updateMetadata = useCallback((identity: string, metadata: string) => {
+    return fetch('http://localhost:7880/twirp/livekit.RoomService/UpdateParticipant', {
+      headers: {
+        accept: 'application/json, text/plain, */*',
+        'accept-language': 'en-US,en;q=0.9',
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        room: 'Students',
+        identity: identity,
+        metadata: metadata,
+        name: '',
+      }),
+      method: 'POST',
     });
-  };
-
+  }, []);
   return (
-    <DisplayContext.Provider value={displayOptions}>
-      <div className="roomContainer">
-        <div className="topBar">
-          <h2>LiveKit Video</h2>
-          <div className="right">
-            <div>
-              <input
-                id="showStats"
-                type="checkbox"
-                onChange={(e) => updateOptions({ showStats: e.target.checked })}
-              />
-              <label htmlFor="showStats">Show Stats</label>
-            </div>
-            <div>
-              <button
-                className="iconButton"
-                disabled={displayOptions.stageLayout === 'grid'}
-                onClick={() => {
-                  updateOptions({ stageLayout: 'grid' });
-                }}
-              >
-                <FontAwesomeIcon height={32} icon={faThLarge} />
-              </button>
-              <button
-                className="iconButton"
-                disabled={displayOptions.stageLayout === 'speaker'}
-                onClick={() => {
-                  updateOptions({ stageLayout: 'speaker' });
-                }}
-              >
-                <FontAwesomeIcon height={32} icon={faSquare} />
-              </button>
-            </div>
-            <div className="participantCount">
-              <FontAwesomeIcon icon={faUserFriends} />
-              <span>{numParticipants}</span>
-            </div>
-          </div>
-        </div>
-        <LiveKitRoom
-          url={url}
-          token={token}
-          onConnected={(room) => {
-            setLogLevel('debug');
-            onConnected(room, query);
-            room.on(RoomEvent.ParticipantConnected, () => updateParticipantSize(room));
-            room.on(RoomEvent.ParticipantDisconnected, () => onParticipantDisconnected(room));
-            updateParticipantSize(room);
+    <div className="flex flex-col">
+      <div className="w-full flex flex-row justify-center mb-4">
+        <button
+          className=" border-solid border-2 w-10 bg-red-500"
+          onClick={() => {
+            roomState.participants.forEach(async (participant) => {
+              updateMetadata(
+                participant.identity,
+                String.fromCharCode(0 | (Math.random() * 26 + 97)),
+              );
+            });
           }}
-          roomOptions={{
-            adaptiveStream: isSet(query, 'adaptiveStream'),
-            dynacast: isSet(query, 'dynacast'),
-            publishDefaults: {
-              simulcast: isSet(query, 'simulcast'),
-            },
-            videoCaptureDefaults: {
-              resolution: VideoPresets.h720.resolution,
-            },
-          }}
-          onLeave={onLeave}
-        />
+        >
+          Test
+        </button>
       </div>
-    </DisplayContext.Provider>
+      <div className="grid gap-2 grid-cols-2">
+        {roomState.participants.map((participant) => {
+          return (
+            <div key={participant.sid} className=" bg-orange-400 p-2">
+              <div>Name: {participant.identity}</div>
+              <div>Metadata: {participant.metadata}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
-};
-
-async function onConnected(room: Room, query: URLSearchParams) {
-  // make it easier to debug
-  (window as any).currentRoom = room;
-
-  if (isSet(query, 'audioEnabled')) {
-    const audioDeviceId = query.get('audioDeviceId');
-    if (audioDeviceId && room.options.audioCaptureDefaults) {
-      room.options.audioCaptureDefaults.deviceId = audioDeviceId;
-    }
-    await room.localParticipant.setMicrophoneEnabled(true);
-  }
-
-  if (isSet(query, 'videoEnabled')) {
-    const videoDeviceId = query.get('videoDeviceId');
-    if (videoDeviceId && room.options.videoCaptureDefaults) {
-      room.options.videoCaptureDefaults.deviceId = videoDeviceId;
-    }
-    await room.localParticipant.setCameraEnabled(true);
-  }
 }
 
-function isSet(query: URLSearchParams, key: string): boolean {
-  return query.get(key) === '1' || query.get(key) === 'true';
-}
+export default RoomPage;
